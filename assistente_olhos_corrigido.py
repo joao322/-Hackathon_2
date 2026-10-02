@@ -8,7 +8,8 @@ import numpy as np
 import mediapipe as mp
 import serial
 import subprocess
-import pyautogui # Controle manual do teclado
+import pyautogui # Controle manual do teclado e mouse
+import urllib.request
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
@@ -33,10 +34,8 @@ def desligar_luz():
 # 1. MAPEAMENTO DOS CONTATOS DO WHATSAPP
 CONTATOS_WHATSAPP = {
     "JOÃO": "+557197761111",
-    "SANDRA": "+5575992350300",
-    "HUMBERTO": "+5571999990002",
-    "HAROLDO": "+5571999990003",
-    "SILEIDE": "+5571999990004"
+    "VAL": "+557491887916",
+    "MARIO": "+557592350300"
 }
 
 # 2. MENSAGEM PADRÃO DIRETA
@@ -44,7 +43,6 @@ MENSAGEM_PADRAO_DIRETA = "Saudade meu filho(a), me ligue!"
 
 # 3. DOWNLOAD AUTOMÁTICO DO MODELO DE VISÃO
 MODEL_PATH = "face_landmarker.task"
-import urllib.request
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
 
 if not os.path.exists(MODEL_PATH):
@@ -65,42 +63,40 @@ def speak_async(text):
                     engine.setProperty("voice", voice.id)
                     break
             engine.setProperty("rate", 160)
-            engine.setProperty("volume", 1.0)
+            if is_socorro_mode:
+                engine.setProperty("volume", 1.0)
+            else:
+                engine.setProperty("volume", .2)
             engine.say(text)
             engine.runAndWait()
         except Exception as e:
             print(f"Erro no áudio: {e}")
     threading.Thread(target=run_speech, daemon=True).start()
 
-# NOVA FUNÇÃO DE WHATSAPP (Totalmente Nativa e Confiável no Linux)
+# FUNÇÃO DE WHATSAPP (Com cliques e tempos ajustados)
 def enviar_mensagem_whatsapp(numero_telefone, mensagem_texto):
     def run_whatsapp():
         try:
             print(f"Preparando envio para {numero_telefone}...")
             
-            # 1. Prepara o link com o número e o texto
             texto_codificado = urllib.parse.quote(mensagem_texto)
             numero = numero_telefone.replace("+", "").replace(" ", "").replace("-", "")
             link_app = f"https://web.whatsapp.com/send?phone={numero}&text={texto_codificado}"
 
-            # 2. Abre o navegador padrão do Fedora na página do WhatsApp Web
             print("Abrindo navegador...")
             subprocess.Popen(["xdg-open", link_app])
             
-            # 3. Dá o tempo exato para a página carregar (Aumente se a internet estiver lenta)
-            print("Aguardando 15 segundos para o WhatsApp Web carregar...")
+            print("Aguardando 35 segundos para o WhatsApp Web carregar...")
             time.sleep(35)
             
-            # 4. Simula o Enter físico no teclado para enviar a mensagem
-            print("Enviando comando ENTER...")
-            pyautogui.click()
-            time.sleep(2)
+            print("Clicando e enviando comando ENTER...")
+            pyautogui.click(x=1342,y=981,duration=1)
+            time.sleep(3)
             pyautogui.press("enter")
             
-            # 5. Espera 3 segundos, fecha a aba e volta o foco
-            time.sleep(5
-                       )
+            time.sleep(5)
             pyautogui.hotkey("ctrl", "w")
+            #pyautogui.hotkey("alt", "f4")
             
             print("Mensagem enviada com sucesso no Fedora!")
 
@@ -146,12 +142,12 @@ options = vision.FaceLandmarkerOptions(
 )
 detector = vision.FaceLandmarker.create_from_options(options)
 
-# ESTRUTURA DOS MENUS ATUALIZADA
+# ESTRUTURA DOS MENUS (Adicionado SOCORRO no menu inicial)
 menus = {
-    "INICIAL": ["PEDIDO", "DOR", "LIGAR", "LUZ", "SAIR"],
+    "INICIAL": ["PEDIDO", "DOR", "LIGAR", "LUZ", "SOCORRO", "SAIR"],
     "PEDIDO": ["Fome", "Boca Seca", "Ajustar a cama", "Voltar"],
     "DOR": ["Cabeça", "Peito", "Barriga/Enjoo", "Perna", "Braço", "Costas", "Voltar"],
-    "LIGAR": ["JOÃO", "SANDRA", "HUMBERTO", "HAROLDO", "SILEIDE", "Voltar"],
+    "LIGAR": ["JOÃO", "VAL", "MARIO", "Voltar"],
     "LUZ": ["LIGAR LUZ", "DESLIGAR LUZ", "Voltar"],
 }
 
@@ -162,6 +158,9 @@ blink_start_time = None
 selection_cooldown_end = 0
 has_opened_eyes_first = False
 is_paused = False
+is_socorro_mode = False  # Controle do modo de emergência
+last_socorro_speak = 0
+
 solicitacao_pendente = None
 
 # Câmera
@@ -173,6 +172,40 @@ if not cap.isOpened():
 speak_async("Sistema iniciado.")
 
 while cap.isOpened():
+    
+    # MODO SOCORRO ATIVO (Fica em looping falando e aguardando tecla ESPAÇO)
+    if is_socorro_mode:
+        display = np.zeros((770, 800, 3), dtype=np.uint8)
+        
+        # Alerta visual em vermelho
+        cv2.rectangle(display, (40, 40), (760, 730), (0, 0, 220), -1)
+        cv2.rectangle(display, (40, 40), (760, 730), (255, 255, 255), 4)
+        
+        cv2.putText(display, "PEDIDO DE SOCORRO ATIVO!", (110, 180), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 3)
+        cv2.putText(display, "O sistema esta chamando por ajuda.", (130, 260), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+        cv2.putText(display, "Para desativar e voltar ao normal:", (160, 430), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(display, "Aperte a tecla ESPACO no teclado do PC", (120, 480), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+
+        cv2.imshow("Assistente de Comunicação", display)
+
+        # Fala a cada 4 segundos
+        now_socorro = time.time()
+        if now_socorro - last_socorro_speak > 4.0:
+            speak_async("Socorro! Preciso de ajuda urgente!")
+            last_socorro_speak = now_socorro
+
+        # Tecla ESPAÇO para desativar
+        key = cv2.waitKey(100) & 0xFF
+        if key == ord(' '):
+            is_socorro_mode = False
+            current_menu = "INICIAL"
+            selected_idx = 0
+            speak_async("Modo de socorro desativado.")
+            time.sleep(1)
+            last_scan_time = time.time()
+        
+        continue
+
     success, frame = cap.read()
     if not success:
         print("Erro ao acessar a câmera.")
@@ -189,7 +222,7 @@ while cap.isOpened():
     now = time.time()
     in_cooldown = now < selection_cooldown_end
     current_ear = 0.0
-
+    
     if detection_result.face_landmarks:
         landmarks = detection_result.face_landmarks[0]
         left_ear = calculate_ear(landmarks, LEFT_EYE_IDXS, w, h)
@@ -235,7 +268,12 @@ while cap.isOpened():
                         elif current_menu == "LUZ" and option == "DESLIGAR LUZ":
                             desligar_luz()
 
-                        if current_menu == "LIGAR" and option in CONTATOS_WHATSAPP:
+                        # ATIVAR MODO SOCORRO PELO OLHAR
+                        elif current_menu == "INICIAL" and option == "SOCORRO":
+                            is_socorro_mode = True
+                            speak_async("Modo de socorro ativado.")
+
+                        elif current_menu == "LIGAR" and option in CONTATOS_WHATSAPP:
                             numero = CONTATOS_WHATSAPP[option]
                             if solicitacao_pendente:
                                 msg_final = f"Preciso de ajuda urgente: {solicitacao_pendente}. Por favor, me ligue!"
@@ -293,7 +331,7 @@ while cap.isOpened():
         last_scan_time = now
 
     display = np.zeros((770, 800, 3), dtype=np.uint8)
-
+    
     if is_paused:
         cv2.rectangle(display, (50, 200), (750, 420), (30, 30, 30), -1)
         cv2.rectangle(display, (50, 200), (750, 420), (0, 200, 255), 2)
